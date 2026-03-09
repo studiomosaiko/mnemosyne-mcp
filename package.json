@@ -1,0 +1,58 @@
+{
+  "name": "@mosaiko/mnemosyne",
+  "version": "4.0.0",
+  "description": "Mnemosyne MCP Memory Server",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mnemosyne": "./dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/studiomosaiko/mnemosyne-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "memory",
+    "ai",
+    "agent",
+    "sqlite",
+    "postgres",
+    "qdrant",
+    "redis"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "@qdrant/js-client-rest": "^1.17.0",
+    "better-sqlite3": "^12.2.0",
+    "bullmq": "^5.70.4",
+    "ioredis": "^5.10.0",
+    "pg": "^8.20.0",
+    "ulid": "^3.0.1",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.3.0",
+    "@types/pg": "^8.18.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
