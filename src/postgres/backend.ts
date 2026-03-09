@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import type { Pool, PoolClient, QueryResultRow } from "pg";
 import {
   type BlobStore,
@@ -845,7 +848,7 @@ export class PostgresLifecycle implements LifecycleManager {
   private readonly migrationsDir: string;
 
   constructor(private readonly pool: Pool, options: Pick<PostgresBackendOptions, "migrationsDir">) {
-    this.migrationsDir = options.migrationsDir ?? path.join(process.cwd(), "migrations", "postgres");
+    this.migrationsDir = options.migrationsDir ?? path.join(__dirname, "..", "migrations", "postgres");
   }
 
   async initialize(): Promise<void> {

@@ -3,6 +3,9 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import {
   type BlobFilter,
   type BlobInfo,
@@ -1090,7 +1093,7 @@ export class SqliteMnemosyneBackend implements MnemosyneBackend {
       dbPath: options.dbPath ?? path.join(process.cwd(), "data", "mnemosyne.db"),
       blobsPath: options.blobsPath ?? path.join(process.cwd(), "data", "blobs"),
       backupsPath: options.backupsPath ?? path.join(process.cwd(), "data", "backups"),
-      migrationsDir: options.migrationsDir ?? path.join(process.cwd(), "migrations"),
+      migrationsDir: options.migrationsDir ?? path.join(__dirname, "..", "migrations"),
       defaultNamespace: options.defaultNamespace ?? DEFAULT_NAMESPACE,
     };
     mkdirSync(path.dirname(this.options.dbPath), { recursive: true });
