@@ -1,6 +1,6 @@
 {
   "name": "@studiomosaiko/mnemosyne",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Mnemosyne MCP Memory Server",
   "type": "module",
   "main": "./dist/index.js",
