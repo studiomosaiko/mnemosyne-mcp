@@ -18,7 +18,9 @@ Every time you close a conversation with an AI, it forgets everything. Mnemosyne
 npx @mosaiko/mnemosyne
 ```
 
-That's it. Mnemosyne starts as an MCP server using SQLite — zero config, zero dependencies.
+That's it. Mnemosyne starts as an MCP server using SQLite — zero external services needed.
+
+> **Note:** Personal mode uses SQLite (single file, no setup). Server mode requires Postgres (Supabase), Redis, and Qdrant Cloud — see [Server Mode](#server-cloud) below.
 
 ### Connect to Claude Desktop
 
@@ -82,7 +84,9 @@ Entities, relations, and observations — all queryable and traversable. Namespa
 
 ### Personal (SQLite)
 
-Zero config. Everything in a single file. Perfect for one agent.
+No external services. Everything in a single `.db` file. Perfect for one agent.
+
+**Requirements:** Node.js 22+
 
 ```bash
 npx @mosaiko/mnemosyne
@@ -90,23 +94,26 @@ npx @mosaiko/mnemosyne
 
 ### Server (Cloud)
 
-For teams and multi-agent setups. Uses cloud infrastructure:
+For teams and multi-agent setups. Requires cloud infrastructure:
 
-| Service | Role |
-|---|---|
-| **Supabase** (Postgres + pgvector) | Database + vector storage |
-| **Redis Cloud** (BullMQ) | Durable job queue |
-| **Qdrant Cloud** | Optimized vector search |
+| Service | Role | Required |
+|---|---|---|
+| **Supabase** (Postgres + pgvector) | Database + embeddings | ✅ |
+| **Redis Cloud** (BullMQ) | Durable job queue | ✅ |
+| **Qdrant Cloud** | Optimized vector search | ✅ |
+
+**Requirements:** Node.js 22+ and accounts on all three services above.
 
 ```bash
 DATABASE_URL=postgresql://... \
+DATABASE_PASSWORD=... \
 REDIS_URL=redis://... \
 QDRANT_URL=https://... \
 QDRANT_API_KEY=... \
 npx @mosaiko/mnemosyne
 ```
 
-Auto-detected: if `DATABASE_URL` is set → Server mode.
+Auto-detected: if `DATABASE_URL` is set → Server mode. Otherwise → Personal (SQLite).
 
 ## CLI
 
@@ -170,6 +177,27 @@ npx @mosaiko/mnemosyne --export --format csv --namespace myagent --type fact --t
 ```
 
 Each interface is independently swappable. Mix SQLite memory store with Qdrant vectors? Go ahead.
+
+## Dependencies
+
+### Runtime
+
+| Package | Purpose | Mode |
+|---|---|---|
+| `better-sqlite3` | SQLite driver | Personal |
+| `pg` | Postgres driver | Server |
+| `ioredis` + `bullmq` | Redis client + job queue | Server |
+| `@qdrant/js-client-rest` | Qdrant vector search client | Server |
+| `@modelcontextprotocol/sdk` | MCP protocol | Both |
+| `zod` | Schema validation | Both |
+
+### Development
+
+| Package | Purpose |
+|---|---|
+| `vitest` | Test runner |
+| `tsup` | ESM bundler |
+| `typescript` | Type checking |
 
 ## Development
 
