@@ -78,7 +78,7 @@ async function startServer() {
 
   const server = new Server(
     {
-      name: "@mosaiko/mnemosyne",
+      name: "@studiomosaiko/mnemosyne",
       version: "4.0.0",
     },
     {

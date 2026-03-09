@@ -57,8 +57,11 @@ describe("SqliteMnemosyneBackend", () => {
   it("persists migrations checksums and closes cleanly", async () => {
     const context = await createTestContext();
     try {
-      const migrations = context.backend.db.prepare("SELECT version, checksum FROM schema_migrations ORDER BY version").all();
-      expect(migrations).toHaveLength(2);
+      const migrations = context.backend.db
+        .prepare("SELECT version, checksum FROM schema_migrations ORDER BY version")
+        .all() as Array<{ version: number; checksum: string }>;
+      expect(migrations.map((migration) => migration.version)).toEqual([1, 2, 3]);
+      expect(migrations.every((migration) => migration.checksum)).toBe(true);
 
       await context.backend.lifecycle.close();
       await writeFile(`${context.rootDir}/closed-sentinel`, "ok", "utf8");

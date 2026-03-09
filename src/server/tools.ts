@@ -9,7 +9,6 @@ import {
   importanceDecay,
   purgeTarget,
   recencyScore,
-  SqliteMnemosyneBackend,
 } from "../sqlite/backend.js";
 
 const namespaceSchema = z.string().min(1).default("_");
@@ -203,21 +202,28 @@ function graphProximity(query: string, memoryContent: string): number {
 const queryEmbeddingProvider = new StubEmbeddingProvider();
 
 async function hasEmbeddings(backend: MnemosyneBackend, namespace?: string): Promise<boolean> {
-  if (backend instanceof ServerMnemosyneBackend) {
-    return backend.hasEmbeddings(namespace);
-  }
-  if (backend instanceof SqliteMnemosyneBackend) {
-    const row = backend.db
-    .prepare(
-      `SELECT COUNT(*) AS count
-       FROM embeddings e
-       JOIN memories m ON m.id = e.memory_id
-       ${namespace ? "WHERE m.namespace = ?" : ""}`,
-    )
-    .get(...(namespace ? [namespace] : [])) as { count: number };
-    return row.count > 0;
-  }
-  return false;
+  return backend.hasEmbeddings(namespace);
+}
+
+async function resolveEntityReference(backend: MnemosyneBackend, reference: string, namespace?: string): Promise<string> {
+  const entities = await backend.graph.searchEntities({
+    namespace,
+    name: reference,
+    limit: 1,
+  });
+  return entities[0]?.id ?? reference;
+}
+
+async function findProcedureVersions(backend: MnemosyneBackend, name: string, namespace?: string): Promise<Memory[]> {
+  const procedureNamespace = namespace ?? "_";
+  const matches = await backend.memories.search({
+    namespace: procedureNamespace,
+    types: ["procedure"],
+    includeArchived: true,
+    contentQuery: name,
+    limit: 100,
+  });
+  return matches.filter((memory) => memory.summary === name);
 }
 
 async function semanticSearch(
@@ -481,9 +487,13 @@ export async function callTool(backend: MnemosyneBackend, name: string, rawArgs:
     }
     case "relation_upsert": {
       const args = relationUpsertSchema.parse(rawArgs ?? {});
+      const [fromEntity, toEntity] = await Promise.all([
+        resolveEntityReference(backend, args.from_entity, args.namespace),
+        resolveEntityReference(backend, args.to_entity, args.namespace),
+      ]);
       const relation = await backend.graph.createRelation({
-        fromEntity: args.from_entity,
-        toEntity: args.to_entity,
+        fromEntity,
+        toEntity,
         relationType: args.relation_type,
         namespace: args.namespace,
         properties: args.properties,
@@ -557,6 +567,9 @@ export async function callTool(backend: MnemosyneBackend, name: string, rawArgs:
     }
     case "procedure_save": {
       const args = procedureSaveSchema.parse(rawArgs ?? {});
+      const existingVersions = await findProcedureVersions(backend, args.name, args.namespace);
+      const current = existingVersions.find((memory) => memory.status === "active");
+      const version = existingVersions.length + 1;
       const memory = await backend.memories.create({
         type: "procedure",
         namespace: args.namespace,
@@ -568,11 +581,18 @@ export async function callTool(backend: MnemosyneBackend, name: string, rawArgs:
         details: {
           name: args.name,
           namespace: args.namespace ?? "_",
+          version,
           steps: args.steps,
           prerequisites: args.prerequisites ?? [],
           triggers: args.triggers ?? [],
         },
       });
+      if (current) {
+        await backend.memories.update(current.id, {
+          status: "archived",
+          supersededBy: memory.id,
+        });
+      }
       await backend.queue.enqueue({ type: "embed", payload: { memory_id: memory.id } });
       return asText(memory);
     }
@@ -603,19 +623,11 @@ export async function callTool(backend: MnemosyneBackend, name: string, rawArgs:
     case "memory_stats": {
       const args = statsSchema.parse(rawArgs ?? {});
       const queue = await backend.queue.stats();
-      const memories = await backend.memories.search({
-        namespace: args.namespace,
-        includeArchived: true,
-        limit: 10_000,
-      });
-      const byType = memories.reduce<Record<string, number>>((accumulator, memory) => {
-        accumulator[memory.type] = (accumulator[memory.type] ?? 0) + 1;
-        return accumulator;
-      }, {});
+      const counts = await backend.memories.countByType(args.namespace);
       return asText({
-        total_memories: memories.length,
-        by_type: byType,
-        namespaces: [...new Set(memories.map((memory) => memory.namespace))],
+        total_memories: counts.total,
+        by_type: counts.byType,
+        namespaces: counts.namespaces,
         queue,
         event_log: await backend.events.verify(),
       });

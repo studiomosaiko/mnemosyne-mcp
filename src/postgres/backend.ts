@@ -242,16 +242,7 @@ export class PostgresMemoryStore implements MemoryStore {
   async create(memory: MemoryInput): Promise<Memory> {
     const procedureDetails = memory.type === "procedure" ? ((memory.details ?? {}) as ProcedureDetailsInput) : null;
     const namespace = memory.namespace ?? this.defaultNamespace;
-    const existingProcedure =
-      memory.type === "procedure" && procedureDetails?.name
-        ? (
-            await this.pool.query<{ memory_id: string; version: number }>(
-              "SELECT memory_id, version FROM procedures WHERE name = $1 AND namespace = $2",
-              [procedureDetails.name, namespace],
-            )
-          ).rows[0]
-        : undefined;
-    const id = memory.id ?? existingProcedure?.memory_id ?? newId();
+    const id = memory.id ?? newId();
     const timestamp = memory.createdAt ?? nowIso();
     const normalized = {
       id,
@@ -277,66 +268,35 @@ export class PostgresMemoryStore implements MemoryStore {
     };
 
     await withTransaction(this.pool, async (client) => {
-      if (existingProcedure?.memory_id) {
-        await client.query(
-          `UPDATE memories SET
-             type = $1, namespace = $2, content = $3, summary = $4, content_hash = $5, category = $6, tags = $7,
-             importance = $8, source = $9, agent_id = $10, session_id = $11, updated_at = $12, status = $13,
-             superseded_by = $14, expires_at = $15, embedding_model = $16, embedding_version = $17, embedded_at = $18
-           WHERE id = $19`,
-          [
-            normalized.type,
-            normalized.namespace,
-            normalized.content,
-            normalized.summary,
-            normalized.contentHash,
-            normalized.category,
-            normalized.tags,
-            normalized.importance,
-            normalized.source,
-            normalized.agentId,
-            normalized.sessionId,
-            normalized.updatedAt,
-            normalized.status,
-            normalized.supersededBy,
-            normalized.expiresAt,
-            normalized.embeddingModel,
-            normalized.embeddingVersion,
-            normalized.embeddedAt,
-            normalized.id,
-          ],
-        );
-      } else {
-        await client.query(
-          `INSERT INTO memories
-           (id, type, namespace, content, summary, content_hash, category, tags, importance, source, agent_id, session_id,
-            created_at, updated_at, status, superseded_by, expires_at, embedding_model, embedding_version, embedded_at)
-           VALUES
-           ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
-          [
-            normalized.id,
-            normalized.type,
-            normalized.namespace,
-            normalized.content,
-            normalized.summary,
-            normalized.contentHash,
-            normalized.category,
-            normalized.tags,
-            normalized.importance,
-            normalized.source,
-            normalized.agentId,
-            normalized.sessionId,
-            normalized.createdAt,
-            normalized.updatedAt,
-            normalized.status,
-            normalized.supersededBy,
-            normalized.expiresAt,
-            normalized.embeddingModel,
-            normalized.embeddingVersion,
-            normalized.embeddedAt,
-          ],
-        );
-      }
+      await client.query(
+        `INSERT INTO memories
+         (id, type, namespace, content, summary, content_hash, category, tags, importance, source, agent_id, session_id,
+          created_at, updated_at, status, superseded_by, expires_at, embedding_model, embedding_version, embedded_at)
+         VALUES
+         ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+        [
+          normalized.id,
+          normalized.type,
+          normalized.namespace,
+          normalized.content,
+          normalized.summary,
+          normalized.contentHash,
+          normalized.category,
+          normalized.tags,
+          normalized.importance,
+          normalized.source,
+          normalized.agentId,
+          normalized.sessionId,
+          normalized.createdAt,
+          normalized.updatedAt,
+          normalized.status,
+          normalized.supersededBy,
+          normalized.expiresAt,
+          normalized.embeddingModel,
+          normalized.embeddingVersion,
+          normalized.embeddedAt,
+        ],
+      );
 
       if (memory.type === "episode") {
         const details = (memory.details ?? {}) as Exclude<MemoryInput["details"], undefined>;
@@ -390,58 +350,41 @@ export class PostgresMemoryStore implements MemoryStore {
 
       if (memory.type === "procedure") {
         const details = procedureDetails ?? {};
-        if (existingProcedure?.memory_id) {
-          await client.query(
-            `UPDATE procedures SET
-               version = $1,
-               steps = $2,
-               prerequisites = $3,
-               triggers = $4,
-               success_count = $5,
-               failure_count = $6,
-               avg_duration_ms = $7,
-               last_used_at = $8,
-               last_result = $9
-             WHERE memory_id = $10`,
-            [
-              Number(existingProcedure.version) + 1,
-              JSON.stringify(details.steps ?? []),
-              JSON.stringify(details.prerequisites ?? []),
-              JSON.stringify(details.triggers ?? []),
-              details.successCount ?? 0,
-              details.failureCount ?? 0,
-              details.avgDurationMs ?? null,
-              details.lastUsedAt ?? null,
-              details.lastResult ?? null,
-              normalized.id,
-            ],
-          );
-        } else {
-          await client.query(
-            `INSERT INTO procedures
-             (memory_id, name, namespace, version, steps, prerequisites, triggers, success_count, failure_count, avg_duration_ms, last_used_at, last_result)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-            [
-              id,
-              details.name ?? "unnamed-procedure",
-              namespace,
-              details.version ?? 1,
-              JSON.stringify(details.steps ?? []),
-              JSON.stringify(details.prerequisites ?? []),
-              JSON.stringify(details.triggers ?? []),
-              details.successCount ?? 0,
-              details.failureCount ?? 0,
-              details.avgDurationMs ?? null,
-              details.lastUsedAt ?? null,
-              details.lastResult ?? null,
-            ],
-          );
-        }
+        await client.query(
+          `INSERT INTO procedures
+           (memory_id, name, namespace, version, steps, prerequisites, triggers, success_count, failure_count, avg_duration_ms, last_used_at, last_result)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           ON CONFLICT (name, namespace) DO UPDATE SET
+             memory_id = excluded.memory_id,
+             version = excluded.version,
+             steps = excluded.steps,
+             prerequisites = excluded.prerequisites,
+             triggers = excluded.triggers,
+             success_count = excluded.success_count,
+             failure_count = excluded.failure_count,
+             avg_duration_ms = excluded.avg_duration_ms,
+             last_used_at = excluded.last_used_at,
+             last_result = excluded.last_result`,
+          [
+            id,
+            details.name ?? "unnamed-procedure",
+            namespace,
+            details.version ?? 1,
+            JSON.stringify(details.steps ?? []),
+            JSON.stringify(details.prerequisites ?? []),
+            JSON.stringify(details.triggers ?? []),
+            details.successCount ?? 0,
+            details.failureCount ?? 0,
+            details.avgDurationMs ?? null,
+            details.lastUsedAt ?? null,
+            details.lastResult ?? null,
+          ],
+        );
       }
     });
 
     await this.events.append({
-      action: existingProcedure?.memory_id ? "update" : "create",
+      action: "create",
       targetType: "memory",
       targetId: id,
       agentId: memory.agentId ?? null,
@@ -581,6 +524,28 @@ export class PostgresMemoryStore implements MemoryStore {
       .slice(0, options.limit ?? 10);
   }
 
+  async countByType(namespace?: string): Promise<{ total: number; byType: Record<string, number>; namespaces: string[] }> {
+    const counts = await this.pool.query<{ type: string; count: string }>(
+      `SELECT type, COUNT(*)::text AS count
+       FROM memories
+       WHERE ($1::text IS NULL OR namespace = $1)
+       GROUP BY type`,
+      [namespace ?? null],
+    );
+    const namespacesResult = namespace
+      ? { rows: [{ namespace }] }
+      : await this.pool.query<{ namespace: string }>("SELECT DISTINCT namespace FROM memories ORDER BY namespace");
+    const byType = counts.rows.reduce<Record<string, number>>((accumulator, row) => {
+      accumulator[row.type] = Number(row.count);
+      return accumulator;
+    }, {});
+    return {
+      total: counts.rows.reduce((sum, row) => sum + Number(row.count), 0),
+      byType,
+      namespaces: namespacesResult.rows.map((row) => row.namespace),
+    };
+  }
+
   async purge(id: string): Promise<void> {
     await withTransaction(this.pool, async (client) => {
       await client.query("DELETE FROM episodes WHERE memory_id = $1", [id]);
@@ -599,9 +564,12 @@ export class PostgresGraphStore implements GraphStore {
   ) {}
 
   async createEntity(entity: EntityInput): Promise<Entity> {
-    const id = entity.id ?? newId();
-    const timestamp = nowIso();
     const namespace = entity.namespace ?? this.defaultNamespace;
+    const existing = (
+      await this.pool.query<{ id: string }>("SELECT id FROM entities WHERE name = $1 AND namespace = $2", [entity.name, namespace])
+    ).rows[0];
+    const id = existing?.id ?? entity.id ?? newId();
+    const timestamp = nowIso();
     await this.pool.query(
       `INSERT INTO entities (id, name, entity_type, namespace, description, properties, created_at, updated_at, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -623,7 +591,7 @@ export class PostgresGraphStore implements GraphStore {
       }
     }
     await this.events.append({
-      action: "create",
+      action: existing ? "update" : "create",
       targetType: "entity",
       targetId: record.id,
       data: { namespace: record.namespace, entity_type: record.entityType },

@@ -231,13 +231,7 @@ class SqliteMemoryStore implements MemoryStore {
 
   async create(memory: MemoryInput): Promise<Memory> {
     const procedureDetails = memory.type === "procedure" ? ((memory.details ?? {}) as ProcedureDetailsInput) : null;
-    const existingProcedure =
-      memory.type === "procedure" && procedureDetails?.name
-        ? (this.db
-            .prepare("SELECT p.memory_id, p.version FROM procedures p WHERE p.name = ? AND p.namespace = ?")
-            .get(procedureDetails.name, memory.namespace ?? this.defaultNamespace) as Row | undefined)
-        : undefined;
-    const id = memory.id ?? (existingProcedure?.memory_id ? String(existingProcedure.memory_id) : newId());
+    const id = memory.id ?? newId();
     const timestamp = memory.createdAt ?? nowIso();
     const normalized = {
       id,
@@ -262,66 +256,34 @@ class SqliteMemoryStore implements MemoryStore {
       embeddedAt: memory.embeddedAt ?? null,
     };
     const tx = this.db.transaction(() => {
-      if (existingProcedure?.memory_id) {
-        this.db
-          .prepare(
-            `UPDATE memories SET
-              type = ?, namespace = ?, content = ?, summary = ?, content_hash = ?, category = ?, tags = ?, importance = ?,
-              source = ?, agent_id = ?, session_id = ?, updated_at = ?, status = ?, superseded_by = ?, expires_at = ?,
-              embedding_model = ?, embedding_version = ?, embedded_at = ?
-             WHERE id = ?`,
-          )
-          .run(
-            normalized.type,
-            normalized.namespace,
-            normalized.content,
-            normalized.summary,
-            normalized.contentHash,
-            normalized.category,
-            normalized.tags,
-            normalized.importance,
-            normalized.source,
-            normalized.agentId,
-            normalized.sessionId,
-            normalized.updatedAt,
-            normalized.status,
-            normalized.supersededBy,
-            normalized.expiresAt,
-            normalized.embeddingModel,
-            normalized.embeddingVersion,
-            normalized.embeddedAt,
-            normalized.id,
-          );
-      } else {
-        this.db
-          .prepare(
-            `INSERT INTO memories
-            (id, type, namespace, content, summary, content_hash, category, tags, importance, source, agent_id, session_id, created_at, updated_at, status, superseded_by, expires_at, embedding_model, embedding_version, embedded_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(
-            normalized.id,
-            normalized.type,
-            normalized.namespace,
-            normalized.content,
-            normalized.summary,
-            normalized.contentHash,
-            normalized.category,
-            normalized.tags,
-            normalized.importance,
-            normalized.source,
-            normalized.agentId,
-            normalized.sessionId,
-            normalized.createdAt,
-            normalized.updatedAt,
-            normalized.status,
-            normalized.supersededBy,
-            normalized.expiresAt,
-            normalized.embeddingModel,
-            normalized.embeddingVersion,
-            normalized.embeddedAt,
-          );
-      }
+      this.db
+        .prepare(
+          `INSERT INTO memories
+          (id, type, namespace, content, summary, content_hash, category, tags, importance, source, agent_id, session_id, created_at, updated_at, status, superseded_by, expires_at, embedding_model, embedding_version, embedded_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          normalized.id,
+          normalized.type,
+          normalized.namespace,
+          normalized.content,
+          normalized.summary,
+          normalized.contentHash,
+          normalized.category,
+          normalized.tags,
+          normalized.importance,
+          normalized.source,
+          normalized.agentId,
+          normalized.sessionId,
+          normalized.createdAt,
+          normalized.updatedAt,
+          normalized.status,
+          normalized.supersededBy,
+          normalized.expiresAt,
+          normalized.embeddingModel,
+          normalized.embeddingVersion,
+          normalized.embeddedAt,
+        );
 
       if (memory.type === "episode") {
         const details = (memory.details ?? {}) as Exclude<MemoryInput["details"], undefined>;
@@ -358,60 +320,42 @@ class SqliteMemoryStore implements MemoryStore {
       }
       if (memory.type === "procedure") {
         const details = procedureDetails ?? {};
-        if (existingProcedure?.memory_id) {
-          this.db
-            .prepare(
-              `UPDATE procedures SET
-                version = ?,
-                steps = ?,
-                prerequisites = ?,
-                triggers = ?,
-                success_count = ?,
-                failure_count = ?,
-                avg_duration_ms = ?,
-                last_used_at = ?,
-                last_result = ?
-               WHERE memory_id = ?`,
-            )
-            .run(
-              Number(existingProcedure.version) + 1,
-              JSON.stringify(details.steps ?? []),
-              JSON.stringify(details.prerequisites ?? []),
-              JSON.stringify(details.triggers ?? []),
-              details.successCount ?? 0,
-              details.failureCount ?? 0,
-              details.avgDurationMs ?? null,
-              details.lastUsedAt ?? null,
-              details.lastResult ?? null,
-              normalized.id,
-            );
-        } else {
-          this.db
-            .prepare(
-              `INSERT INTO procedures
-              (memory_id, name, namespace, version, steps, prerequisites, triggers, success_count, failure_count, avg_duration_ms, last_used_at, last_result)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            )
-            .run(
-              id,
-              details.name ?? "unnamed-procedure",
-              memory.namespace ?? this.defaultNamespace,
-              details.version ?? 1,
-              JSON.stringify(details.steps ?? []),
-              JSON.stringify(details.prerequisites ?? []),
-              JSON.stringify(details.triggers ?? []),
-              details.successCount ?? 0,
-              details.failureCount ?? 0,
-              details.avgDurationMs ?? null,
-              details.lastUsedAt ?? null,
-              details.lastResult ?? null,
-            );
-        }
+        this.db
+          .prepare(
+            `INSERT INTO procedures
+            (memory_id, name, namespace, version, steps, prerequisites, triggers, success_count, failure_count, avg_duration_ms, last_used_at, last_result)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(name, namespace) DO UPDATE SET
+              memory_id = excluded.memory_id,
+              version = excluded.version,
+              steps = excluded.steps,
+              prerequisites = excluded.prerequisites,
+              triggers = excluded.triggers,
+              success_count = excluded.success_count,
+              failure_count = excluded.failure_count,
+              avg_duration_ms = excluded.avg_duration_ms,
+              last_used_at = excluded.last_used_at,
+              last_result = excluded.last_result`,
+          )
+          .run(
+            id,
+            details.name ?? "unnamed-procedure",
+            memory.namespace ?? this.defaultNamespace,
+            details.version ?? 1,
+            JSON.stringify(details.steps ?? []),
+            JSON.stringify(details.prerequisites ?? []),
+            JSON.stringify(details.triggers ?? []),
+            details.successCount ?? 0,
+            details.failureCount ?? 0,
+            details.avgDurationMs ?? null,
+            details.lastUsedAt ?? null,
+            details.lastResult ?? null,
+          );
       }
     });
     tx();
     await this.events.append({
-      action: existingProcedure?.memory_id ? "update" : "create",
+      action: "create",
       targetType: "memory",
       targetId: id,
       agentId: memory.agentId ?? null,
@@ -560,6 +504,31 @@ class SqliteMemoryStore implements MemoryStore {
     }));
   }
 
+  async countByType(namespace?: string): Promise<{ total: number; byType: Record<string, number>; namespaces: string[] }> {
+    const counts = this.db
+      .prepare(
+        `SELECT type, COUNT(*) AS count
+         FROM memories
+         ${namespace ? "WHERE namespace = ?" : ""}
+         GROUP BY type`,
+      )
+      .all(...(namespace ? [namespace] : [])) as Array<{ type: string; count: number }>;
+    const namespaces = namespace
+      ? [namespace]
+      : ((this.db
+          .prepare("SELECT DISTINCT namespace FROM memories ORDER BY namespace")
+          .all() as Array<{ namespace: string }>).map((row) => String(row.namespace)));
+    const byType = counts.reduce<Record<string, number>>((accumulator, row) => {
+      accumulator[String(row.type)] = Number(row.count);
+      return accumulator;
+    }, {});
+    return {
+      total: counts.reduce((sum, row) => sum + Number(row.count), 0),
+      byType,
+      namespaces,
+    };
+  }
+
   async purge(id: string): Promise<void> {
     this.db.prepare("DELETE FROM episodes WHERE memory_id = ?").run(id);
     this.db.prepare("DELETE FROM facts WHERE memory_id = ?").run(id);
@@ -572,7 +541,11 @@ class SqliteGraphStore implements GraphStore {
   constructor(private readonly db: Db, private readonly events: EventLog, private readonly defaultNamespace: string) {}
 
   async createEntity(entity: EntityInput): Promise<Entity> {
-    const id = entity.id ?? newId();
+    const namespace = entity.namespace ?? this.defaultNamespace;
+    const existing = this.db
+      .prepare("SELECT id FROM entities WHERE name = ? AND namespace = ?")
+      .get(entity.name, namespace) as Row | undefined;
+    const id = existing?.id ? String(existing.id) : (entity.id ?? newId());
     const timestamp = nowIso();
     this.db
       .prepare(
@@ -589,7 +562,7 @@ class SqliteGraphStore implements GraphStore {
         id,
         entity.name,
         entity.entityType,
-        entity.namespace ?? this.defaultNamespace,
+        namespace,
         entity.description ?? null,
         JSON.stringify(entity.properties ?? {}),
         timestamp,
@@ -598,7 +571,7 @@ class SqliteGraphStore implements GraphStore {
       );
     const row = this.db
       .prepare("SELECT * FROM entities WHERE name = ? AND namespace = ?")
-      .get(entity.name, entity.namespace ?? this.defaultNamespace) as Row;
+      .get(entity.name, namespace) as Row;
     const record = mapEntity(row);
     if (entity.observations?.length) {
       for (const observation of entity.observations) {
@@ -606,7 +579,7 @@ class SqliteGraphStore implements GraphStore {
       }
     }
     await this.events.append({
-      action: "create",
+      action: existing ? "update" : "create",
       targetType: "entity",
       targetId: record.id,
       data: { namespace: record.namespace, entity_type: record.entityType },
@@ -1109,6 +1082,18 @@ export class SqliteMnemosyneBackend implements MnemosyneBackend {
     this.queue = new SqliteJobQueue(this.db);
     this.blobs = new FilesystemBlobStore(this.options.blobsPath, this.db, this.options.defaultNamespace);
     this.lifecycle = new SqliteLifecycleManager(this.db, this.options);
+  }
+
+  async hasEmbeddings(namespace?: string): Promise<boolean> {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM embeddings e
+         JOIN memories m ON m.id = e.memory_id
+         ${namespace ? "WHERE m.namespace = ?" : ""}`,
+      )
+      .get(...(namespace ? [namespace] : [])) as { count: number };
+    return row.count > 0;
   }
 }
 

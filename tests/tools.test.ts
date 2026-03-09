@@ -73,8 +73,8 @@ describe("MCP tools", () => {
 
       const relation = parseToolText(
         await callTool(context.backend, "relation_upsert", {
-          from_entity: entity.id,
-          to_entity: relationTarget.id,
+          from_entity: "Alice",
+          to_entity: "Tea Club",
           relation_type: "member_of",
           namespace: "agent-a",
         }),
@@ -109,13 +109,24 @@ describe("MCP tools", () => {
           tags: ["routine"],
         }),
       ) as { id: string };
+      const procedureV2 = parseToolText(
+        await callTool(context.backend, "procedure_save", {
+          name: "Morning checklist",
+          namespace: "agent-a",
+          steps: ["Wake up", "Hydrate", "Make tea"],
+          tags: ["routine"],
+        }),
+      ) as { id: string };
+      expect(procedureV2.id).not.toBe(procedure.id);
+      expect((await context.backend.memories.get(procedure.id))?.status).toBe("archived");
+      expect((await context.backend.memories.get(procedure.id))?.supersededBy).toBe(procedureV2.id);
       const procedureGet = parseToolText(
         await callTool(context.backend, "procedure_get", {
           namespace: "agent-a",
           name: "Morning checklist",
         }),
       ) as { results: Array<{ id: string }> };
-      expect(procedureGet.results.map((item) => item.id)).toContain(procedure.id);
+      expect(procedureGet.results.map((item) => item.id)).toContain(procedureV2.id);
 
       const blob = parseToolText(
         await callTool(context.backend, "blob_store", {

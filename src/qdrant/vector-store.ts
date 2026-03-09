@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { MemoryStore, ReindexFilter, ScoredMemory, VectorSearchOptions, VectorStore, EmbeddingData } from "../interfaces/index.js";
 
 function toUuid(memoryId: string, chunkIndex: number): string {
-  const hash = createHash("md5").update(`${memoryId}:${chunkIndex}`).digest("hex");
+  const hash = createHash("sha256").update(`${memoryId}:${chunkIndex}`).digest("hex");
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
 }
 

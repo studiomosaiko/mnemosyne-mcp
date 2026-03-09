@@ -89,7 +89,7 @@ describe("SqliteMemoryStore", () => {
     }
   });
 
-  it("versions procedures by name and purges records", async () => {
+  it("stores new procedure memories while keeping the latest procedure row current", async () => {
     const context = await createTestContext();
     try {
       const first = await context.backend.memories.create({
@@ -107,16 +107,24 @@ describe("SqliteMemoryStore", () => {
         content: "Step 1: open dashboard\nStep 2: click deploy",
         details: {
           name: "Deploy service",
+          version: 2,
           steps: ["open dashboard", "click deploy"],
         },
       });
 
-      expect(second.id).toBe(first.id);
+      expect(second.id).not.toBe(first.id);
       const procedureRow = context.backend.db
-        .prepare("SELECT version, steps FROM procedures WHERE memory_id = ?")
-        .get(first.id) as { version: number; steps: string };
+        .prepare("SELECT memory_id, version, steps FROM procedures WHERE name = ? AND namespace = ?")
+        .get("Deploy service", "ops") as { memory_id: string; version: number; steps: string };
+      expect(procedureRow.memory_id).toBe(second.id);
       expect(procedureRow.version).toBe(2);
       expect(JSON.parse(procedureRow.steps)).toEqual(["open dashboard", "click deploy"]);
+
+      await context.backend.memories.purge(second.id);
+      expect(await context.backend.memories.get(first.id)).not.toBeNull();
+      expect(await context.backend.memories.get(second.id)).toBeNull();
+      const latestProcedureRow = context.backend.db.prepare("SELECT COUNT(*) AS count FROM procedures").get() as { count: number };
+      expect(latestProcedureRow.count).toBe(0);
 
       await context.backend.memories.purge(first.id);
       expect(await context.backend.memories.get(first.id)).toBeNull();

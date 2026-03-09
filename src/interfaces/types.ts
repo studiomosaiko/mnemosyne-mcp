@@ -67,6 +67,12 @@ export interface StructuredQuery {
   contentQuery?: string;
 }
 
+export interface MemoryCounts {
+  total: number;
+  byType: Record<string, number>;
+  namespaces: string[];
+}
+
 export interface TextSearchOptions {
   namespace?: string;
   limit?: number;
@@ -346,6 +352,7 @@ export interface MemoryStore {
   update(id: string, fields: Partial<Memory>): Promise<void>;
   search(query: StructuredQuery): Promise<Memory[]>;
   textSearch(query: string, options: TextSearchOptions): Promise<ScoredMemory[]>;
+  countByType(namespace?: string): Promise<MemoryCounts>;
   purge(id: string): Promise<void>;
 }
 
@@ -405,4 +412,5 @@ export interface MnemosyneBackend {
   blobs: BlobStore;
   events: EventLog;
   lifecycle: LifecycleManager;
+  hasEmbeddings(namespace?: string): Promise<boolean>;
 }

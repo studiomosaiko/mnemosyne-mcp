@@ -87,6 +87,30 @@ describe("SqliteGraphStore", () => {
     }
   });
 
+  it("upserts entities by name and namespace", async () => {
+    const context = await createTestContext();
+    try {
+      const first = await context.backend.graph.createEntity({
+        name: "Alice",
+        entityType: "person",
+        namespace: "team",
+        description: "First description",
+      });
+      const second = await context.backend.graph.createEntity({
+        name: "Alice",
+        entityType: "person",
+        namespace: "team",
+        description: "Updated description",
+      });
+
+      expect(second.id).toBe(first.id);
+      expect(second.description).toBe("Updated description");
+      expect(await context.backend.graph.searchEntities({ namespace: "team", name: "Alice", limit: 10 })).toHaveLength(1);
+    } finally {
+      await destroyTestContext(context);
+    }
+  });
+
   it("enforces namespace triggers for relations and observations", async () => {
     const context = await createTestContext();
     try {
