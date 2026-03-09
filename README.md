@@ -15,7 +15,7 @@ Every time you close a conversation with an AI, it forgets everything. Mnemosyne
 ## Quick Start
 
 ```bash
-npx @mosaiko/mnemosyne
+npx @studiomosaiko/mnemosyne
 ```
 
 That's it. Mnemosyne starts as an MCP server using SQLite — zero external services needed.
@@ -31,7 +31,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "mnemosyne": {
       "command": "npx",
-      "args": ["@mosaiko/mnemosyne"]
+      "args": ["@studiomosaiko/mnemosyne"]
     }
   }
 }
@@ -89,7 +89,7 @@ No external services. Everything in a single `.db` file. Perfect for one agent.
 **Requirements:** Node.js 22+
 
 ```bash
-npx @mosaiko/mnemosyne
+npx @studiomosaiko/mnemosyne
 ```
 
 ### Server (Cloud)
@@ -110,7 +110,7 @@ DATABASE_PASSWORD=... \
 REDIS_URL=redis://... \
 QDRANT_URL=https://... \
 QDRANT_API_KEY=... \
-npx @mosaiko/mnemosyne
+npx @studiomosaiko/mnemosyne
 ```
 
 Auto-detected: if `DATABASE_URL` is set → Server mode. Otherwise → Personal (SQLite).
@@ -120,14 +120,14 @@ Auto-detected: if `DATABASE_URL` is set → Server mode. Otherwise → Personal 
 ### Import existing memory
 
 ```bash
-npx @mosaiko/mnemosyne --import-memory ./MEMORY.md --namespace myagent
+npx @studiomosaiko/mnemosyne --import-memory ./MEMORY.md --namespace myagent
 ```
 
 ### Export
 
 ```bash
-npx @mosaiko/mnemosyne --export --format json --namespace myagent
-npx @mosaiko/mnemosyne --export --format csv --namespace myagent --type fact --tags profile
+npx @studiomosaiko/mnemosyne --export --format json --namespace myagent
+npx @studiomosaiko/mnemosyne --export --format csv --namespace myagent --type fact --tags profile
 ```
 
 ## Configuration

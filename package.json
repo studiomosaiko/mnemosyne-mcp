@@ -1,5 +1,5 @@
 {
-  "name": "@mosaiko/mnemosyne",
+  "name": "@studiomosaiko/mnemosyne",
   "version": "4.0.0",
   "description": "Mnemosyne MCP Memory Server",
   "type": "module",
